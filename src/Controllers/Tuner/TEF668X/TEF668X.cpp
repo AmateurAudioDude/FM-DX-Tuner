@@ -503,7 +503,20 @@ TEF668X::getQualityOffset(QualityMode mode)
 int16_t
 TEF668X::getQualityBandwidth(QualityMode mode)
 {
-    /* TODO */
+    if (this->getQuality())
+    {
+        QualityData data;
+        i2c.read((this->mode == MODE_FM ? MODULE_FM : MODULE_AM),
+                 (this->mode == MODE_FM ? FM_Get_Quality_Status : AM_Get_Quality_Status),
+                 sizeof(QualityData) / sizeof(uint16_t),
+                 (uint16_t*)&data);
+
+        if (data.status != 0xFFFA && data.bandwidth > 0)
+        {
+            // Bandwidth from chip is in units of 10 Hz, divide by 10 to get kHz
+            return (int16_t)(data.bandwidth / 10);
+        }
+    }
     return -1;
 }
 

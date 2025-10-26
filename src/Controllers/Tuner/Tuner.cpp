@@ -59,6 +59,17 @@ Tuner::loop()
     {
         this->handleSquelch();
     }
+
+    if (timerBandwidth.process(Timer::Continous))
+    {
+        // Always report actual bandwidth from chip
+        const int16_t currentBandwidth = this->driver.getQualityBandwidth(TunerDriver::QUALITY_FAST);
+        if (currentBandwidth > 0 && currentBandwidth != this->lastReportedBandwidth)
+        {
+            this->feedback(FMDX_TUNER_PROTOCOL_BANDWIDTH, (uint32_t)currentBandwidth * 1000);
+            this->lastReportedBandwidth = currentBandwidth;
+        }
+    }
 }
 
 const Command*
@@ -96,6 +107,9 @@ Tuner::start()
         constexpr Timer::Interval squelchInterval = 50;
         this->timerSquelch.set(squelchInterval);
 
+        constexpr Timer::Interval bandwidthInterval = 500;
+        this->timerBandwidth.set(bandwidthInterval);
+
 #if LED_ENABLED && defined(LED_ID_POWER)
         led.on(LED_ID_POWER);
 #endif
@@ -113,6 +127,7 @@ Tuner::shutdown()
 
     this->timerQuality.unset();
     this->timerSquelch.unset();
+    this->timerBandwidth.unset();
 
 #ifdef ARDUINO_ARCH_AVR
     /* Release SDA and SCL lines used by hardware I2C */
@@ -362,7 +377,8 @@ Tuner::cbBandwidth(Controller *instance,
 
     if (tuner->driver.setBandwidth(value))
     {
-        tuner->feedback(FMDX_TUNER_PROTOCOL_BANDWIDTH, tuner->driver.getBandwidth());
+        tuner->userBandwidth = value;
+        tuner->feedback(FMDX_TUNER_PROTOCOL_BANDWIDTH_USER, value);
         return true;
     }
 

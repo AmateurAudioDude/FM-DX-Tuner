@@ -74,6 +74,9 @@ private:
 
     Timer timerQuality;
     Timer timerSquelch;
+    Timer timerBandwidth;
+    uint16_t lastReportedBandwidth = 0;
+    uint32_t userBandwidth = 0;
 };
 
 #endif
