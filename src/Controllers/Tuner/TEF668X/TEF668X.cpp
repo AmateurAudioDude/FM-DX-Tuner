@@ -532,8 +532,12 @@ TEF668X::getQualityOffset(QualityMode mode)
 int16_t
 TEF668X::getQualityBandwidth(QualityMode mode)
 {
-    /* TODO */
-    return -1;
+    if (!this->bw.isAvailable())
+    {
+        return -1;
+    }
+
+    return this->bw.getLast();
 }
 
 bool
