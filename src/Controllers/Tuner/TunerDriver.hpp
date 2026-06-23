@@ -31,6 +31,11 @@ public:
         TUNE_SEEK = 1 << 1
     };
 
+    friend inline TuneFlags operator|(TuneFlags a, TuneFlags b)
+    {
+        return static_cast<TuneFlags>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
+    }
+
     enum QualityMode : uint8_t
     {
         QUALITY_DEFAULT = 0,

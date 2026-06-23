@@ -7,14 +7,30 @@
 /* Step size [kHz] used while seeking (independent of the manual tuning
    step). */
 #define SEEK_STEP_FM 100
-#define SEEK_STEP_AM 9
-
-/* Band edges [kHz] respected while seeking, wrapping around to the
-   opposite edge instead of stopping there. */
 #define SEEK_LIMIT_FM_LOW  87000
 #define SEEK_LIMIT_FM_HIGH 108000
-#define SEEK_LIMIT_AM_LOW  520
-#define SEEK_LIMIT_AM_HIGH 1800
+
+#define SEEK_STEP_OIRT 30
+#define SEEK_LIMIT_OIRT_LOW  64000
+#define SEEK_LIMIT_OIRT_HIGH 74000
+
+/* LW/MW. */
+#define SEEK_AM_LOW_STEP 9
+
+#define SEEK_LIMIT_LW_LOW  144
+#define SEEK_LIMIT_LW_HIGH 513
+
+#if SEEK_AM_LOW_STEP == 10
+#define SEEK_LIMIT_MW_LOW  520
+#define SEEK_LIMIT_MW_HIGH 1720
+#else
+#define SEEK_LIMIT_MW_LOW  522
+#define SEEK_LIMIT_MW_HIGH 1791
+#endif
+
+#define SEEK_STEP_SW 5
+#define SEEK_LIMIT_SW_LOW  1800
+#define SEEK_LIMIT_SW_HIGH 27000
 
 /* Settling delay before a quality sample is trusted while seeking.
    Per the TEF668X manual, the chip's own quality timestamp counts

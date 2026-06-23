@@ -233,25 +233,60 @@ Scan::process()
 bool
 Scan::startSeek(bool up)
 {
+    const uint32_t freq = this->driver.getFrequency();
+
     switch (this->driver.getMode())
     {
         case MODE_FM:
-            this->step = SEEK_STEP_FM;
-            this->seekLimitLow = SEEK_LIMIT_FM_LOW;
-            this->seekLimitHigh = SEEK_LIMIT_FM_HIGH;
+            if (freq >= SEEK_LIMIT_OIRT_LOW && freq <= SEEK_LIMIT_OIRT_HIGH)
+            {
+                this->step = SEEK_STEP_OIRT;
+                this->seekLimitLow = SEEK_LIMIT_OIRT_LOW;
+                this->seekLimitHigh = SEEK_LIMIT_OIRT_HIGH;
+            }
+            else if (freq < SEEK_LIMIT_FM_LOW)
+            {
+                /* Between OIRT and the official FM band (e.g.
+                   74-87 MHz)its own self-contained zone, wrapping
+                   only within itself, not bleeding into either neighbour */
+                this->step = SEEK_STEP_FM;
+                this->seekLimitLow = SEEK_LIMIT_OIRT_HIGH;
+                this->seekLimitHigh = SEEK_LIMIT_FM_LOW;
+            }
+            else
+            {
+                this->step = SEEK_STEP_FM;
+                this->seekLimitLow = SEEK_LIMIT_FM_LOW;
+                this->seekLimitHigh = SEEK_LIMIT_FM_HIGH;
+            }
             break;
 
         case MODE_AM:
-            this->step = SEEK_STEP_AM;
-            this->seekLimitLow = SEEK_LIMIT_AM_LOW;
-            this->seekLimitHigh = SEEK_LIMIT_AM_HIGH;
+            if (freq < SEEK_LIMIT_MW_LOW)
+            {
+                this->step = SEEK_AM_LOW_STEP;
+                this->seekLimitLow = SEEK_LIMIT_LW_LOW;
+                this->seekLimitHigh = SEEK_LIMIT_LW_HIGH;
+            }
+            else if (freq <= SEEK_LIMIT_MW_HIGH)
+            {
+                this->step = SEEK_AM_LOW_STEP;
+                this->seekLimitLow = SEEK_LIMIT_MW_LOW;
+                this->seekLimitHigh = SEEK_LIMIT_MW_HIGH;
+            }
+            else
+            {
+                this->step = SEEK_STEP_SW;
+                this->seekLimitLow = SEEK_LIMIT_SW_LOW;
+                this->seekLimitHigh = SEEK_LIMIT_SW_HIGH;
+            }
             break;
 
         default:
             return false;
     }
 
-    this->prevFrequency = this->driver.getFrequency();
+    this->prevFrequency = freq;
     this->prevBandwidth = this->driver.getBandwidth();
     this->seekUp = up;
     this->seekStepCount = 0;
