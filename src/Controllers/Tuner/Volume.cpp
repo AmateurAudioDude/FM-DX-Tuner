@@ -38,9 +38,8 @@ Volume::getVolume()
 void
 Volume::mute()
 {
-    if (this->muteRefs == 0)
+    if (this->muteRefs++ == 0)
     {
-        this->muteRefs++;
         this->driver.setVolume(0);
     }
 }
@@ -48,12 +47,10 @@ Volume::mute()
 void
 Volume::unMute()
 {
-    if (this->muteRefs)
+    if (this->muteRefs &&
+        --this->muteRefs == 0)
     {
-        if (--this->muteRefs == 0)
-        {
-            this->driver.setVolume(this->getVolume());
-        }
+        this->driver.setVolume(this->getVolume());
     }
 }
 

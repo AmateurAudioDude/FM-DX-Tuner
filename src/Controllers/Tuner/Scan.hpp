@@ -18,6 +18,7 @@
 #define FMDX_TUNER_SCAN_H
 #include "TunerDriver.hpp"
 #include "Volume.hpp"
+#include "../../Utils/Timer.hpp"
 
 class Scan
 {
@@ -40,21 +41,29 @@ public:
     bool getRepeat(void);
 
     bool isActive(void);
+    bool isSeeking(void);
+    bool isScanning(void);
 
     bool start(void);
     void stop(void);
     void process(void);
 
+    bool startSeek(bool up);
+
 private:
     void init(void);
     void next(void);
+    void stopSeek(bool found);
+    void seekWrap(void);
+    bool seekQualityOk(void);
 
     enum State : uint8_t
     {
         None,
-        Sample
+        Sample,
+        Seek
     };
-    
+
     TunerDriver &driver;
     Volume &volume;
 
@@ -70,6 +79,29 @@ private:
     uint32_t prevBandwidth;
     uint32_t current;
     State state;
+    bool seekUp;
+
+    /* Seek band edges and a safety cap on the total number of steps,
+       so seek can't loop forever wrapping around an empty band */
+    uint32_t seekLimitLow;
+    uint32_t seekLimitHigh;
+    uint32_t seekStepCount;
+    uint32_t seekMaxSteps;
+
+    /* Extra settle time at each frequency, independent of, and
+       not limited by, the chip's own quality timestamp field */
+    Timer seekSettle;
+
+    /* Number of fresh samples taken at the current frequency
+       so far, up to SEEK_MAX_ATTEMPTS before giving up */
+    uint8_t seekAttempts;
+
+    /* The very first step's T<freq> report is deferred until after
+       the settle wait, rather than printed synchronously inside the
+       same call that just finished reading the incoming command.
+       Avoids a suspected USB CDC timing race unique to a write
+       landing immediately after a read on the same interface */
+    bool seekFirstReportPending;
 };
 
 #endif

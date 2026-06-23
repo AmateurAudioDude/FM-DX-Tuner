@@ -58,6 +58,7 @@ Tuner::loop()
     if (timerSquelch.process(Timer::Continous))
     {
         this->handleSquelch();
+        this->handleAutosquelch();
     }
 }
 
@@ -75,10 +76,12 @@ Tuner::getCommands(uint8_t *len)
         { FMDX_TUNER_PROTOCOL_BANDWIDTH, &this->cbBandwidth },
         { FMDX_TUNER_PROTOCOL_VOLUME, &this->cbVolume },
         { FMDX_TUNER_PROTOCOL_SQUELCH, &this->cbSquelch },
+        { FMDX_TUNER_PROTOCOL_AUTOSQUELCH, &this->cbAutosquelch },
         { FMDX_TUNER_PROTOCOL_OUTPUT_MODE, &this->cbOutputMode },
         { FMDX_TUNER_PROTOCOL_QUALITY, &this->cbQuality },
         { FMDX_TUNER_PROTOCOL_SCAN, &this->cbScan },
-        { FMDX_TUNER_PROTOCOL_CUSTOM, &this->cbCustom }
+        { FMDX_TUNER_PROTOCOL_CUSTOM, &this->cbCustom },
+        { FMDX_TUNER_PROTOCOL_SEEK, &this->cbSeek }
     };
 
     *len = sizeof(commands) / sizeof(Command);
@@ -141,6 +144,8 @@ Tuner::handleQuality()
     const auto cci = this->driver.getQualityCci(this->qualityMode);
     const auto aci = this->driver.getQualityAci(this->qualityMode);
     const auto bw = this->driver.getQualityBandwidth(this->qualityMode);
+    const auto usn = this->driver.getQualityNoise(this->qualityMode);
+    const auto wam = this->driver.getQualityCoChannel(this->qualityMode);
 
     Comm.print('S');
 
@@ -161,6 +166,10 @@ Tuner::handleQuality()
     Comm.print(aci, DEC);
     Comm.print(',');
     Comm.print(bw, DEC);
+    Comm.print(',');
+    Comm.print(usn, DEC);
+    Comm.print(',');
+    Comm.print(wam, DEC);
     Comm.print('\n');
 }
 
@@ -227,6 +236,18 @@ Tuner::handleSquelch()
     this->squelch.process(value);
 }
 
+void
+Tuner::handleAutosquelch()
+{
+    if (this->autosquelch.getMode() == SQUELCH_NONE)
+    {
+        return;
+    }
+
+    this->autosquelch.setTimeout(this->driver.getMode() == MODE_AM ? 1 : autosquelchTimeout);
+    this->autosquelch.process(this->driver.getSquelch() ? 1 : 0);
+}
+
 bool
 Tuner::cbCancel(Controller *instance,
              const char *args)
@@ -247,12 +268,37 @@ Tuner::cbMode(Controller *instance,
               const char *args)
 {
     Tuner *tuner = (Tuner*)instance;
+
+    if (tuner->scan.isScanning())
+    {
+        return false;
+    }
+
     tuner->cbCancel(instance, NULL);
     const Mode value = (Mode)atol(args);
 
+    const Mode prevMode = tuner->driver.getMode();
     const uint32_t prevFrequency = tuner->driver.getFrequency();
-    const uint32_t prevStep = tuner->driver.getFrequency();
-    if (tuner->driver.setMode(value))
+    const uint32_t prevStep = tuner->driver.getStep();
+
+    if (prevMode == MODE_FM || prevMode == MODE_AM)
+    {
+        tuner->lastFrequency[prevMode] = prevFrequency;
+    }
+
+    bool ok;
+    if ((value == MODE_FM || value == MODE_AM) &&
+        tuner->lastFrequency[value])
+    {
+        ok = tuner->driver.setFrequency(tuner->lastFrequency[value],
+                                        TunerDriver::TUNE_DEFAULT);
+    }
+    else
+    {
+        ok = tuner->driver.setMode(value);
+    }
+
+    if (ok)
     {
         tuner->clear();
         tuner->feedback(FMDX_TUNER_PROTOCOL_MODE, value);
@@ -276,6 +322,12 @@ Tuner::cbFrequency(Controller *instance,
                    const char *args)
 {
     Tuner *tuner = (Tuner*)instance;
+
+    if (tuner->scan.isScanning())
+    {
+        return false;
+    }
+
     tuner->cbCancel(instance, NULL);
     const uint32_t value = atol(args);
 
@@ -301,6 +353,18 @@ Tuner::cbFrequency(Controller *instance,
 
         const uint32_t newAlignment = tuner->driver.getAlignment();
         tuner->feedback(FMDX_TUNER_PROTOCOL_ALIGNMENT, newAlignment);
+
+        const Mode curMode = tuner->driver.getMode();
+        if (curMode == MODE_FM || curMode == MODE_AM)
+        {
+            tuner->lastFrequency[curMode] = newFrequency;
+        }
+        if ((prevMode == MODE_FM || prevMode == MODE_AM) &&
+            prevMode != curMode)
+        {
+            tuner->lastFrequency[prevMode] = prevFrequency;
+        }
+
         return true;
     }
 
@@ -312,6 +376,12 @@ Tuner::cbDeemphasis(Controller *instance,
                     const char *args)
 {
     Tuner *tuner = (Tuner*)instance;
+
+    if (tuner->scan.isScanning())
+    {
+        return false;
+    }
+
     tuner->cbCancel(instance, NULL);
     const uint32_t value = atol(args);
 
@@ -329,6 +399,12 @@ Tuner::cbAgc(Controller *instance,
              const char *args)
 {
     Tuner *tuner = (Tuner*)instance;
+
+    if (tuner->scan.isScanning())
+    {
+        return false;
+    }
+
     tuner->cbCancel(instance, NULL);
     const uint32_t value = atol(args);
 
@@ -346,6 +422,12 @@ Tuner::cbAlignment(Controller *instance,
                    const char *args)
 {
     Tuner *tuner = (Tuner*)instance;
+
+    if (tuner->scan.isScanning())
+    {
+        return false;
+    }
+
     tuner->cbCancel(instance, NULL);
     const uint32_t value = atol(args);
 
@@ -363,6 +445,12 @@ Tuner::cbBandwidth(Controller *instance,
                    const char *args)
 {
     Tuner *tuner = (Tuner*)instance;
+
+    if (tuner->scan.isScanning())
+    {
+        return false;
+    }
+
     tuner->cbCancel(instance, NULL);
     const uint32_t value = atol(args);
 
@@ -380,7 +468,9 @@ Tuner::cbVolume(Controller *instance,
                 const char *args)
 {
     Tuner *tuner = (Tuner*)instance;
-    tuner->cbCancel(instance, NULL);
+    /* No cbCancel() here: a volume change would cause
+       a silent frequency revert mid-seek with
+       no feedback to the host */
     const uint32_t value = atol(args);
     
     if (value <= 100)
@@ -399,6 +489,12 @@ Tuner::cbSquelch(Controller *instance,
                  const char *args)
 {
     Tuner *tuner = (Tuner*)instance;
+
+    if (tuner->scan.isScanning())
+    {
+        return false;
+    }
+
     tuner->cbCancel(instance, NULL);
     const int32_t value = atol(args);
 
@@ -420,10 +516,43 @@ Tuner::cbSquelch(Controller *instance,
 }
 
 bool
+Tuner::cbAutosquelch(Controller *instance,
+                     const char *args)
+{
+    Tuner *tuner = (Tuner*)instance;
+
+    if (tuner->scan.isScanning())
+    {
+        return false;
+    }
+
+    tuner->cbCancel(instance, NULL);
+    const bool enable = (atol(args) != 0);
+
+    if (enable)
+    {
+        tuner->autosquelch.set(SQUELCH_AUTO, 1);
+    }
+    else
+    {
+        tuner->autosquelch.set(SQUELCH_NONE, 0);
+    }
+
+    tuner->feedback(FMDX_TUNER_PROTOCOL_AUTOSQUELCH, enable ? 1 : 0);
+    return true;
+}
+
+bool
 Tuner::cbOutputMode(Controller *instance,
                     const char *args)
 {
     Tuner *tuner = (Tuner*)instance;
+
+    if (tuner->scan.isScanning())
+    {
+        return false;
+    }
+
     tuner->cbCancel(instance, NULL);
     const OutputMode value = (OutputMode)atol(args);
 
@@ -442,6 +571,12 @@ Tuner::cbQuality(Controller *instance,
                  const char *args)
 {
     Tuner *tuner = (Tuner*)instance;
+
+    if (tuner->scan.isScanning())
+    {
+        return false;
+    }
+
     tuner->cbCancel(instance, NULL);
     const uint32_t value = atol(args);
 
@@ -498,6 +633,12 @@ Tuner::cbCustom(Controller *instance,
                 const char *args)
 {
     Tuner *tuner = (Tuner*)instance;
+
+    if (tuner->scan.isScanning())
+    {
+        return false;
+    }
+
     tuner->cbCancel(instance, NULL);
 
     if (tuner->driver.setCustom("custom", args))
@@ -509,6 +650,33 @@ Tuner::cbCustom(Controller *instance,
     }
 
     return false;
+}
+
+bool
+Tuner::cbSeek(Controller *instance,
+              const char *args)
+{
+    Tuner *tuner = (Tuner*)instance;
+
+    if (tuner->scan.isScanning())
+    {
+        return false;
+    }
+
+    /* If a seek is in progress, redirect it from
+       wherever it currently is rather than cancelling */
+    if (!tuner->scan.isSeeking())
+    {
+        tuner->cbCancel(instance, NULL);
+    }
+
+    /* 1 = seek down, 2 = seek up (matches Search_PE5PVB_Mode) */
+    if (!args || (args[0] != '1' && args[0] != '2'))
+    {
+        return false;
+    }
+
+    return tuner->scan.startSeek(args[0] == '2');
 }
 
 void

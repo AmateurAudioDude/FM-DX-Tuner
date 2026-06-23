@@ -54,7 +54,10 @@ public:
     int16_t getQualityOffset(QualityMode mode) override;
     int16_t getQualityBandwidth(QualityMode mode) override;
     bool getQualityStereo(QualityMode mode) override;
-    
+    bool getSquelch() override;
+    int16_t getQualityNoise(QualityMode mode) override;
+    int16_t getQualityCoChannel(QualityMode mode) override;
+
     const char* getName() override;
 
 private:
@@ -84,6 +87,16 @@ private:
     RingBuffer<int16_t, int32_t, 100 / qualityInterval> rssi;
     RingBuffer<uint16_t, uint32_t, 300 / qualityInterval> cci;
     RingBuffer<uint16_t, uint16_t, 300 / qualityInterval> bw;
+
+    /* Latest raw quality values for the autosquelch decision (getSquelch).
+       Initialised so the squelch stays closed until a valid sample arrives. */
+    uint16_t squelchUsn = 0xFFFF;
+    uint16_t squelchWam = 0xFFFF;
+    int16_t  squelchOffset = 32767;
+
+    /* Latest raw modulation reading [*0.1%], exposed via
+       getQualityModulation() */
+    uint16_t modulation = 0;
 
     Timer timerQuality;
 #if TUNER_TEF668X_RDS_DAVN == false

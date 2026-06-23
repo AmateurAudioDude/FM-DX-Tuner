@@ -36,6 +36,8 @@
 #define FMDX_TUNER_PROTOCOL_QUALITY     "I"
 #define FMDX_TUNER_PROTOCOL_SCAN        "S"
 #define FMDX_TUNER_PROTOCOL_CUSTOM      "G"
+#define FMDX_TUNER_PROTOCOL_AUTOSQUELCH "H"
+#define FMDX_TUNER_PROTOCOL_SEEK        "K"
 #define FMDX_TUNER_PROTOCOL_ROTATOR     "C"
 #define FMDX_TUNER_PROTOCOL_ANTENNA     "Z"
 
@@ -59,7 +61,8 @@ enum SquelchMode
     SQUELCH_NONE = 0,
     SQUELCH_RSSI = 1,
     SQUELCH_STEREO = 2,
-    SQUELCH_CCI = 3
+    SQUELCH_CCI = 3,
+    SQUELCH_AUTO = 4
 };
 
 enum OutputMode

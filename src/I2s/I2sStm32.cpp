@@ -82,7 +82,7 @@ I2sDriver_Start(void)
 
     __disable_irq();
     /* TODO: Add timeout */
-    while ((GPIOA->IDR & I2S_PIN_WS) == 1);
+    while ((GPIOA->IDR & I2S_PIN_WS) != 0);
     while ((GPIOA->IDR & I2S_PIN_WS) == 0);
     /* STM32F072 Errata 2.13.4: Enable I2S when the WS is high */
     HAL_I2S_Init(&hi2s1);

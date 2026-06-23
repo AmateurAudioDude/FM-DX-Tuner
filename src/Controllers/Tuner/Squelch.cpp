@@ -78,6 +78,12 @@ Squelch::set(SquelchMode _mode,
     }
 }
 
+void
+Squelch::setTimeout(uint8_t _timeout)
+{
+    this->timeout = _timeout;
+}
+
 SquelchMode
 Squelch::getMode(void)
 {

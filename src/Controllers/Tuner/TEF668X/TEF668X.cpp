@@ -30,6 +30,7 @@
 #include "../Common/Bandwidth.hpp"
 #include "../../../Utils/Utils.hpp"
 #include "../../../../ConfigTEF668X.hpp"
+#include "../../../../ConfigSeek.hpp"
 
 void
 TEF668X::setup()
@@ -230,7 +231,7 @@ TEF668X::setFrequencyFM(uint32_t  value,
         this->timerUnmute.set(unmuteDelay);
     }
 
-    this->qualityDelay = 2;
+    this->qualityDelay = (flags & TUNE_SEEK) ? SEEK_QUALITY_DELAY : 2;
 }
 
 void
@@ -248,7 +249,7 @@ TEF668X::setFrequencyAM(uint32_t  value,
 
     constexpr uint16_t modePreset = 1;
     i2c.write(MODULE_AM, AM_Tune_To, 2, modePreset, this->frequency);
-    this->qualityDelay = 2;
+    this->qualityDelay = (flags & TUNE_SEEK) ? SEEK_QUALITY_DELAY : 2;
 }
 
 bool
@@ -525,15 +526,53 @@ TEF668X::getQualityAci(QualityMode mode)
 int16_t
 TEF668X::getQualityModulation(QualityMode mode)
 {
-    /* TODO */
-    return -1;
+    (void)mode;
+
+    if (!this->rssi.isAvailable())
+    {
+        return -1;
+    }
+
+    return this->modulation;
 }
 
 int16_t
 TEF668X::getQualityOffset(QualityMode mode)
 {
-    /* TODO */
-    return -1;
+    (void)mode;
+
+    if (!this->rssi.isAvailable())
+    {
+        return -1;
+    }
+
+    return this->squelchOffset;
+}
+
+int16_t
+TEF668X::getQualityNoise(QualityMode mode)
+{
+    (void)mode;
+
+    if (!this->rssi.isAvailable())
+    {
+        return -1;
+    }
+
+    return this->squelchUsn;
+}
+
+int16_t
+TEF668X::getQualityCoChannel(QualityMode mode)
+{
+    (void)mode;
+
+    if (!this->rssi.isAvailable())
+    {
+        return -1;
+    }
+
+    return this->squelchWam;
 }
 
 int16_t
@@ -556,6 +595,34 @@ TEF668X::getQualityStereo(QualityMode mode)
     }
 
     return false;
+}
+
+bool
+TEF668X::getSquelch()
+{
+    /* Autosquelch open criteria (hardcoded thresholds, tune to taste).
+       Mirrors the PE5PVB TEF6686 firmware: USN (noise), WAM (co-channel)
+       and frequency offset must all be within limits. The USN limits
+       correspond to fmscansens/amscansens * 30 in that firmware. */
+    if (this->mode == MODE_FM)
+    {
+        constexpr uint16_t usnMax = 300;
+        constexpr uint16_t wamMax = 230;
+        constexpr int16_t offsetMax = 100;
+        return (this->squelchUsn < usnMax) &&
+               (this->squelchWam < wamMax) &&
+               (this->squelchOffset > -offsetMax && this->squelchOffset < offsetMax);
+    }
+
+    if (this->mode == MODE_AM)
+    {
+        constexpr uint16_t usnMax = 300;
+        constexpr int16_t offsetMax = 2;
+        return (this->squelchUsn < usnMax) &&
+               (this->squelchOffset > -offsetMax && this->squelchOffset < offsetMax);
+    }
+
+    return true;
 }
 
 const char*
@@ -662,7 +729,7 @@ TEF668X::readQuality()
         return;
     }
 
-    const uint16_t timestamp = data.status & 0x1FF;
+    const uint16_t timestamp = data.status & 0x3FF;
     const uint16_t delay = (uint16_t)this->qualityDelay * 10;
     if (timestamp >= delay &&
         data.level >= -200 &&
@@ -671,6 +738,11 @@ TEF668X::readQuality()
         this->rssi.add(data.level * 10);
         this->cci.add(data.coChannel);
         this->bw.add(data.bandwidth / 10);
+
+        this->squelchUsn = data.noise;
+        this->squelchWam = data.coChannel;
+        this->squelchOffset = data.offset;
+        this->modulation = data.modulation;
     }
 }
 

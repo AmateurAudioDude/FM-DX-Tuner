@@ -29,6 +29,7 @@ public:
     void process(int8_t value);
 
     void set(SquelchMode _mode, int8_t _threshold);
+    void setTimeout(uint8_t _timeout);
     SquelchMode getMode(void);
     int8_t getThreshold(void);
 
