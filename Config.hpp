@@ -6,7 +6,7 @@
    ----------------------------------------------------------------------- */
 /* Tuner driver (available drivers: TEF668X, SAF7730, SAF775X, SI47XX) */
 /* Warning: SAF775X support is currently very experimental */
-#define TUNER_DRIVER TEF668X
+#define TUNER_DRIVER SI47XX
 
 /* I2C bus clock speed */
 /* Typical values: 100 kHz (100000L) or 400 kHz (400000L)

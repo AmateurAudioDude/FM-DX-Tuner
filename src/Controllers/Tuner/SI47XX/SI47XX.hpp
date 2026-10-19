@@ -85,6 +85,7 @@ private:
     uint32_t lastQualityMs = 0;
     uint32_t lastRdsMs = 0;
     uint32_t lastTuneMs = 0;
+    bool scanTune = false;
 };
 
 #endif

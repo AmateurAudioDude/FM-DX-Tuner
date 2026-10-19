@@ -44,6 +44,7 @@ namespace
     constexpr uint16_t PROP_FM_CHANNEL_FILTER = 0x1102;
     constexpr uint16_t PROP_FM_BLEND_MONO_THRESHOLD = 0x1106;
     constexpr uint16_t PROP_FM_BLEND_STEREO_THRESHOLD = 0x1105;
+    constexpr uint16_t PROP_FM_SEEK_TUNE_RSSI_THRESHOLD = 0x1404;
     constexpr uint16_t PROP_FM_RDS_CONFIG = 0x1502;
 
     constexpr uint16_t PROP_AM_CHANNEL_FILTER = 0x3102;
@@ -151,6 +152,8 @@ SI47XX::start()
 
     if (this->mode == MODE_FM)
     {
+        // Seek validity is unused, an unreachable threshold may shorten tunes on occupied channels
+        this->setProperty(PROP_FM_SEEK_TUNE_RSSI_THRESHOLD, 127);
         this->setProperty(PROP_FM_RDS_CONFIG, 0xAA01);
         this->resetRds();
     }
@@ -193,6 +196,20 @@ SI47XX::loop()
     }
 
     const uint32_t now = millis();
+
+    // A scan needs one fresh reading per point, not the listening hold-off or RDS
+    if (this->scanTune)
+    {
+        if (!this->qualityValid &&
+            (now - this->lastTuneMs) >= SI47XX_SCAN_SETTLE_MS &&
+            (now - this->lastQualityMs) >= SI47XX_SCAN_SETTLE_MS)
+        {
+            this->readRsq();
+            this->lastQualityMs = now;
+        }
+        return;
+    }
+
     if ((now - this->lastTuneMs) < 500)
     {
         return;
@@ -288,6 +305,7 @@ SI47XX::setMode(Mode value)
 
     if (this->mode == MODE_FM)
     {
+        this->setProperty(PROP_FM_SEEK_TUNE_RSSI_THRESHOLD, 127);
         this->setProperty(PROP_FM_RDS_CONFIG, 0xAA01);
         this->resetRds();
     }
@@ -311,7 +329,7 @@ SI47XX::setFrequency(uint32_t value,
         }
 
         const uint16_t freq10khz = (uint16_t)(value / 10);
-        const uint8_t fast = 0x00;
+        const uint8_t fast = (SI47XX_SCAN_FAST_TUNE && (flags & TUNE_SCAN)) ? 0x01 : 0x00;
         const uint8_t freeze = 0x00;
         const uint8_t cmd[] =
         {
@@ -328,11 +346,13 @@ SI47XX::setFrequency(uint32_t value,
         }
 
         this->lastTuneMs = millis();
+        this->scanTune = (flags & TUNE_SCAN) != 0;
         delay(SI47XX_TUNE_DELAY_MS);
         this->qualityValid = false;
-        if (!this->readTuneStatus())
+        // A fast tune's status may be inaccurate, so report the frequency actually tuned
+        if (!this->readTuneStatus() || fast)
         {
-            this->frequency = value;
+            this->frequency = (uint32_t)freq10khz * 10U;
         }
         return true;
     }
@@ -366,6 +386,7 @@ SI47XX::setFrequency(uint32_t value,
         }
 
         this->lastTuneMs = millis();
+        this->scanTune = (flags & TUNE_SCAN) != 0;
         delay(SI47XX_TUNE_DELAY_MS);
         this->qualityValid = false;
         if (!this->readTuneStatus())

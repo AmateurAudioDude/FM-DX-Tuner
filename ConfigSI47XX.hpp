@@ -50,7 +50,7 @@
    - Reset: GPIO16
    - Power-up delay: 500 ms
    - CTS timeout: 150 ms
-   - STC timeout/poll: 250 ms / 10 ms */
+   - STC timeout/poll: 250 ms / 1 ms */
 /* I2C pins (ESP32). Set to -1 to use Wire defaults. */
 #define SI47XX_I2C_SDA 18
 #define SI47XX_I2C_SCL 17
@@ -60,7 +60,7 @@
 #define SI47XX_TUNE_DELAY_MS 0
 #define SI47XX_CTS_TIMEOUT_MS 150
 #define SI47XX_STC_TIMEOUT_MS 250
-#define SI47XX_STC_POLL_MS 10
+#define SI47XX_STC_POLL_MS 1
 
 /* Radio power enable pin (active high). Set to -1 to disable. */
 #define SI47XX_RADIO_EN_PIN 15
@@ -142,6 +142,10 @@
 /* Driver timing */
 #define SI47XX_QUALITY_INTERVAL_MS 60
 #define SI47XX_RDS_INTERVAL_MS 90
+#define SI47XX_SCAN_SETTLE_MS 3
+
+/* FM scan uses the chip's fast tune (1 = enabled, 0 = disabled) */
+#define SI47XX_SCAN_FAST_TUNE 1
 
 /* ----------------------------------------------------------------------- */
 
