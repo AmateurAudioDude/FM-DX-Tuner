@@ -65,6 +65,7 @@ private:
     bool readResponse(uint8_t *data, size_t len);
     bool waitCts(uint16_t timeoutMs);
     bool setProperty(uint16_t prop, uint16_t value);
+    bool applyBlend();
 
     bool readRsq();
     bool readTuneStatus();
@@ -86,6 +87,9 @@ private:
     uint32_t lastRdsMs = 0;
     uint32_t lastTuneMs = 0;
     bool scanTune = false;
+    bool forceMono = false;
+    uint16_t lastAntcap = 0;
+    uint16_t scanAntcap = 0;
 };
 
 #endif

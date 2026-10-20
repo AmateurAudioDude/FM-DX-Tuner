@@ -42,12 +42,17 @@ namespace
 
     constexpr uint16_t PROP_FM_DEEMPHASIS = 0x1100;
     constexpr uint16_t PROP_FM_CHANNEL_FILTER = 0x1102;
-    constexpr uint16_t PROP_FM_BLEND_MONO_THRESHOLD = 0x1106;
-    constexpr uint16_t PROP_FM_BLEND_STEREO_THRESHOLD = 0x1105;
+    constexpr uint16_t PROP_FM_BLEND_RSSI_STEREO_THRESHOLD = 0x1800;
+    constexpr uint16_t PROP_FM_BLEND_RSSI_MONO_THRESHOLD = 0x1801;
+    constexpr uint16_t PROP_FM_BLEND_SNR_STEREO_THRESHOLD = 0x1804;
+    constexpr uint16_t PROP_FM_BLEND_SNR_MONO_THRESHOLD = 0x1805;
+    constexpr uint16_t PROP_FM_BLEND_MULTIPATH_STEREO_THRESHOLD = 0x1808;
+    constexpr uint16_t PROP_FM_BLEND_MULTIPATH_MONO_THRESHOLD = 0x1809;
     constexpr uint16_t PROP_FM_SEEK_TUNE_RSSI_THRESHOLD = 0x1404;
     constexpr uint16_t PROP_FM_RDS_CONFIG = 0x1502;
 
     constexpr uint16_t PROP_AM_CHANNEL_FILTER = 0x3102;
+    constexpr uint16_t PROP_AM_SEEK_RSSI_THRESHOLD = 0x3404;
     constexpr uint16_t PROP_RX_VOLUME = 0x4000;
     constexpr uint16_t PROP_RX_HARD_MUTE = 0x4001;
 
@@ -156,7 +161,14 @@ SI47XX::start()
         this->setProperty(PROP_FM_SEEK_TUNE_RSSI_THRESHOLD, 127);
         this->setProperty(PROP_FM_RDS_CONFIG, 0xAA01);
         this->resetRds();
+        this->applyBlend();
     }
+#if SI47XX_AM_SKIP_VALID_CHECK
+    else
+    {
+        this->setProperty(PROP_AM_SEEK_RSSI_THRESHOLD, 63);
+    }
+#endif
 
     delay(50);
  #if SI47XX_MUTE_PIN >= 0
@@ -200,9 +212,10 @@ SI47XX::loop()
     // A scan needs one fresh reading per point, not the listening hold-off or RDS
     if (this->scanTune)
     {
+        const uint32_t settle = (this->mode == MODE_AM) ? SI47XX_SCAN_SETTLE_AM_MS : SI47XX_SCAN_SETTLE_MS;
         if (!this->qualityValid &&
-            (now - this->lastTuneMs) >= SI47XX_SCAN_SETTLE_MS &&
-            (now - this->lastQualityMs) >= SI47XX_SCAN_SETTLE_MS)
+            (now - this->lastTuneMs) >= settle &&
+            (now - this->lastQualityMs) >= settle)
         {
             this->readRsq();
             this->lastQualityMs = now;
@@ -308,7 +321,14 @@ SI47XX::setMode(Mode value)
         this->setProperty(PROP_FM_SEEK_TUNE_RSSI_THRESHOLD, 127);
         this->setProperty(PROP_FM_RDS_CONFIG, 0xAA01);
         this->resetRds();
+        this->applyBlend();
     }
+#if SI47XX_AM_SKIP_VALID_CHECK
+    else
+    {
+        this->setProperty(PROP_AM_SEEK_RSSI_THRESHOLD, 63);
+    }
+#endif
 
     return true;
 }
@@ -369,15 +389,20 @@ SI47XX::setFrequency(uint32_t value,
         }
 
         const uint16_t freqkhz = (uint16_t)value;
-        const uint8_t fast = 0x00;
+        const bool scan = (flags & TUNE_SCAN) != 0;
+        // The first scan point finds the antenna capacitor with a normal tune, the rest reuse it
+        const bool firstScanPoint = scan && !this->scanTune;
+        const bool measureAntcap = SI47XX_SCAN_FIXED_ANTCAP_AM && firstScanPoint;
+        const uint16_t antcap = (SI47XX_SCAN_FIXED_ANTCAP_AM && scan && !firstScanPoint) ? this->scanAntcap : 0;
+        const uint8_t fast = (SI47XX_SCAN_FAST_TUNE_AM && scan && !measureAntcap) ? 0x01 : 0x00;
         const uint8_t cmd[] =
         {
             CMD_AM_TUNE_FREQ,
             fast,
             (uint8_t)(freqkhz >> 8),
             (uint8_t)(freqkhz & 0xFF),
-            0x00,
-            0x00
+            (uint8_t)(antcap >> 8),
+            (uint8_t)(antcap & 0xFF)
         };
 
         if (!this->sendCommand(cmd, sizeof(cmd)))
@@ -386,12 +411,17 @@ SI47XX::setFrequency(uint32_t value,
         }
 
         this->lastTuneMs = millis();
-        this->scanTune = (flags & TUNE_SCAN) != 0;
+        this->scanTune = scan;
         delay(SI47XX_TUNE_DELAY_MS);
         this->qualityValid = false;
-        if (!this->readTuneStatus())
+        const bool tuned = this->readTuneStatus();
+        if (!tuned || fast)
         {
             this->frequency = value;
+        }
+        if (measureAntcap)
+        {
+            this->scanAntcap = tuned ? this->lastAntcap : 0;
         }
         return true;
     }
@@ -545,25 +575,26 @@ SI47XX::setOutputMode(OutputMode value)
         return false;
     }
 
-    if (value == OUTPUT_MODE_MONO)
+    if (value != OUTPUT_MODE_MONO && value != OUTPUT_MODE_STEREO)
     {
-        if (!this->setProperty(PROP_FM_BLEND_MONO_THRESHOLD, 0x007F))
-        {
-            return false;
-        }
-        return this->setProperty(PROP_FM_BLEND_STEREO_THRESHOLD, 0x007F);
+        return false;
     }
 
-    if (value == OUTPUT_MODE_STEREO)
-    {
-        if (!this->setProperty(PROP_FM_BLEND_MONO_THRESHOLD, 0x0000))
-        {
-            return false;
-        }
-        return this->setProperty(PROP_FM_BLEND_STEREO_THRESHOLD, 0x0000);
-    }
+    this->forceMono = (value == OUTPUT_MODE_MONO);
+    return this->applyBlend();
+}
 
-    return false;
+bool
+SI47XX::applyBlend()
+{
+    // Mono moves every blend threshold out of reach, stereo restores the chip defaults
+    const bool mono = this->forceMono;
+    return this->setProperty(PROP_FM_BLEND_RSSI_STEREO_THRESHOLD, mono ? 127 : 49) &&
+           this->setProperty(PROP_FM_BLEND_RSSI_MONO_THRESHOLD, mono ? 127 : 30) &&
+           this->setProperty(PROP_FM_BLEND_SNR_STEREO_THRESHOLD, mono ? 127 : 27) &&
+           this->setProperty(PROP_FM_BLEND_SNR_MONO_THRESHOLD, mono ? 127 : 14) &&
+           this->setProperty(PROP_FM_BLEND_MULTIPATH_STEREO_THRESHOLD, mono ? 0 : 20) &&
+           this->setProperty(PROP_FM_BLEND_MULTIPATH_MONO_THRESHOLD, mono ? 0 : 60);
 }
 
 bool
@@ -874,6 +905,10 @@ SI47XX::readTuneStatus()
     this->lastSnr = resp[5];
     this->lastFreqOffset = 0;
     this->qualityValid = true;
+    if (!fm)
+    {
+        this->lastAntcap = (uint16_t)((resp[6] << 8) | resp[7]);
+    }
 
     const uint8_t clear[] = { cmd, 0x01 };
     this->sendCommand(clear, sizeof(clear), true);

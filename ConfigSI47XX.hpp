@@ -142,10 +142,20 @@
 /* Driver timing */
 #define SI47XX_QUALITY_INTERVAL_MS 60
 #define SI47XX_RDS_INTERVAL_MS 90
-#define SI47XX_SCAN_SETTLE_MS 3
+#define SI47XX_SCAN_SETTLE_MS 5
+#define SI47XX_SCAN_SETTLE_AM_MS 5
 
 /* FM scan uses the chip's fast tune (1 = enabled, 0 = disabled) */
 #define SI47XX_SCAN_FAST_TUNE 1
+
+/* AM scan uses the chip's fast tune (1 = enabled, 0 = disabled) */
+#define SI47XX_SCAN_FAST_TUNE_AM 1
+
+/* AM scan reuses the antenna capacitor found on its first point (1 = enabled, 0 = disabled) */
+#define SI47XX_SCAN_FIXED_ANTCAP_AM 1
+
+/* AM tunes skip the valid station check (1 = enabled, 0 = disabled) */
+#define SI47XX_AM_SKIP_VALID_CHECK 1
 
 /* ----------------------------------------------------------------------- */
 
